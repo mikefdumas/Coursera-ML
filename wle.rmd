@@ -1,0 +1,70 @@
+```{r chunkSetup, results='hide', echo=FALSE}
+library(doMC)
+registerDoMC(cores=5)
+library(randomForest)
+library(caret)
+set.seed(32323)
+```
+Predicting Exercise Quality
+========================================================
+#### Can you use data to predict how an exercise is performed? 
+
+# Executive Summary
+Exercise is an important part of a healthy lifestyle. While many people exercise frequent, they tend to forget that exercise done incorrectly can have long term repruccions on your body. Many athletes can hurniate disks or tear muscles if an exercise is not done with the appropriate form. This paper will analysis data gathered electronicly from a group of subjects performing an exercise. We will use this sensor data to determine if we can programatically predict how well the exercise was performed from the data alone. 
+
+# Process
+There are many prediction algorithms that can be used to estimate the quality of an exercise being perfomed. However, the first step in creating a prediction algorithm is to clean your data. If you have invalid data, it will greatly affect the accuracy of prediction. Second, we will need to use a form of cross validation to create a training data set and a test data set. Creating two data sets will give us a way to test if our algorithm is accurate on a new data set. Finally, we can begin to explore various algorithms to predict the quality of excersize. 
+
+## Creating a Tidy Data Set
+The first step in our process is to create a tidy, clean data set to predict with. Upon loading the data we see that there are many observations missing. While a few missing data points will not cause our model harm, many columns are missing a majority of data points. So the first thing we do is remove any columns that contain NULL values. 
+
+After removing the NULL values we explore the data set and notice variables related to time. If a subject performs the exercise on minimal sleep, this could affect the quality of the exercise. Given this is a controlled test, we will assume that time will not affect the quality of the exercise and thus we remove this data.
+
+```{r}
+testData = read.csv("/Users/udumami/Dropbox/coursera/Machine Learning/Project/pml-testing.csv", na.strings=c("NA","", "#DIV/0!"))
+testData = testData[,!sapply(testData,function(x) any(is.na(x)))]
+testData = na.omit(testData)
+testData = testData[, !names(testData) %in% c('X', 'user_name', 'raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp', 'num_window', 'new_window','row.names')]
+
+data = read.csv("/Users/udumami/Dropbox/coursera/Machine Learning/Project/pml-training.csv", na.strings=c("NA","", "#DIV/0!"))
+data = data[,!sapply(data,function(x) any(is.na(x)))]
+data = na.omit(data)
+data = data[, !names(data) %in% c('X', 'user_name', 'raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp', 'num_window', 'new_window', 'row.names')]
+```
+
+## Cross Validation
+With a tidy data set in hand, we can focus our efforts on cross validation. Cross validation is an important step in the process as it provides a way to test your algorithm on a untouched data set. We will proceed with a simple variant of cross validation. Instead of splitting our data set into 3 parts (training 60%, tes 20%t and validation 20%) we will use two sets with a 80/20 split. This is because the final portion of our paper will be to test the model on 20 data points that have already been set aside. 
+
+```{r}
+train = createDataPartition(data$classe, p=.8, list=FALSE)
+training = data[train, ]
+testing = data[-train, ]
+```
+
+## Algorithm Selection
+When wanting to predict an outcome, there are many algorithms to choose from. By utlizing the in sample error rate, we can narrow down which algorithm will best suited to predict the quality of exercise being performed by a subject. For this prediction, we started with Decision Tree model and settled on a Random Forest model. 
+
+### Decision Tree
+Our first attempt at prediction was with decision trees. Overall accuracy is very low, less than 50%. This is no better than flipping a coin. While we may be able to tune this algorithm to perform better, we will shift our focus to see if a Random Forest model will perform better. 
+
+```{r}
+modFitDF = train(classe ~ ., method="rpart", data=training)
+p = predict(modFitDF, training)
+confusionMatrix(p, training$classe)
+```
+
+### Random Forest
+Looking at a random forest model we see staggering difference. After our first run with the training set we an in sample error of 0.39%. A number this close to 100% is almost impossible to believe. While our in sample error rate is high, this may be due to over fitting. To help validate our model, we rerun our prediction algorithm on our test data set. We find our out of sample error rate is 0.43%. Having a higher out of sample error rate is expected as the model will naturally be slighly tuned to the training data set. 
+```{r}
+modFitRF = randomForest(classe ~ ., data = training) 
+modFitRF
+
+predRF = predict(modFitRF, testing)
+confusionMatrix(predRF, testing$classe)
+```
+
+# Conclusion
+After creating a tidy data set, using a Random Forest model yielded a high quality prediction algorithm on our training and test data set. The final setp is performing a prediction on the 20 with held data points. A quick prediction run yields us 20 predictions to the quality of exercise for each observation with 100% accuracy. 
+```{r}
+predTest = predict(modFitRF, testData)
+```
